@@ -16,59 +16,87 @@ class Router(dict):
 router = Router()
 
 
-REGISTER = 'REGISTER'
-SERVICE_INFO = 'SERVICE_INFO'
+REGISTER = b'register'
+HEARTBEAT = b'heartbeat'
+SERVICE_INFO = b'service_info'
+GET_SUBSCRIPTION_ADDRESS = b'get_subscription_address'
+
+
+directory = {}
 
 
 @router.add(REGISTER)
 def register(frames):
-    return ['ok']
+    return ['TODO']
+
+
+@router.add(HEARTBEAT)
+def heartbeat(frames):
+    return ['TODO']
+
+
+@router.add(GET_SUBSCRIPTION_ADDRESS)
+def get_subscription_address(frames):
+    return ['TODO']
 
 
 @router.add(SERVICE_INFO)
 def service_info(frames):
     service_name = next(frames)
-    return [{
-        'name': service_name,
-        'rep_address': 'to be continued',
-    }]
+    if service_name not in directory:
+        raise RttpNotFound
+    return [directory[service_name]]
 
 
 class RttpOk:
     code = b'200'
 
 
-class RttpError(Exception):
-    _by_code = {}
+class RegisteredByCode(type):
+    def __init__(self, *args, **kwargs):
+        if self.__name__ != 'RttpError':
+            if self.code in self._by_code:
+                raise ValueError
+            self._by_code[self.code] = self
+        super().__init__(*args, **kwargs)
 
-    # def __new__(cls, *args, **kwargs):
-    #     add to _by_code
+
+class RttpError(Exception, metaclass=RegisteredByCode):
+    _by_code = {}
 
     @classmethod
     def from_code(cls, code):
         return cls._by_code[code]
 
 
+class RttpClientError(RttpError):
+    code = b'400'
+
+
 class RttpNotFound(RttpError):
     code = b'404'
 
 
-RttpError._by_code[RttpNotFound.code] = RttpNotFound
-
-
 def loop(address):
-    with ctx.socket(zmq.REP) as s:
-        s.connect(address)
+    with ctx.socket(zmq.REP) as rep:
+        rep.bind(address)
         while True:
-            poll()
-            request_frames = socket_consume_req(s)
+            received = rep.recv_multipart()
+            # TODO PUBlicate changes in services
+            request_frames = iter(received)
             r = next(request_frames)
             handler = router.get(r)
             if handler:
-                response_frames = [RttpOk.code] + list(handler(request_frames))
+                try:
+                    response_frames = handler(msgpack.loads(f) for f in request_frames)
+                except RttpError as e:
+                    response_frames = [RttpClientError.code] + [
+                        msgpack.dumps(p) for p in [repr(e).encode('utf-8')]]
+                else:
+                    response_frames = [RttpOk.code] + [msgpack.dumps(p) for p in response_frames]
             else:
                 response_frames = [RttpNotFound.code]
-            socket_send_rep(s, response_frames)
+            rep.send_multipart(response_frames)
 
 
 def main():

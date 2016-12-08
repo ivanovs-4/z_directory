@@ -1,36 +1,55 @@
 #!/usr/bin/env python3
 import msgpack
 import zmq
+from time import sleep
 
-from .reqrep_client import ReqRepClient
-from .service_directory import SERVICE_INFO, RttpError
+from service_directory import SERVICE_INFO, RttpError, RttpOk
+
+
+ctx = zmq.Context()
+
+
+class ReqRepClient:
+    def __init__(self, address):
+        self._address = address
+
+    def req(self, frames):
+        # TODO cache socket
+        with ctx.socket(zmq.REQ) as s:
+            s.connect(self._address)
+            s.send_multipart(frames)
+            yield from iter(s.recv_multipart())
 
 
 class RttpClient(ReqRepClient):
-    def _pack_frames(self, frames):
-        """ Do not pack first frame. It is a method name """
-        yield next(frames)
-        yield from super()._pack_frames(frames)
-
-    def _unpack_frames(self, frames):
-        """ Do not pack first frame. It is a response code """
-        yield next(frames)
-        yield from super()._unpack_frames(frames)
-
     def req(self, method_name, question=()):
-        answer = super().req([method_name] + list(question))
+        frames = [method_name] + [msgpack.dumps(f) for f in question]
+        answer = super().req(frames)
         code = next(answer)
         if code != RttpOk.code:
             raise RttpError.from_code(code)(list(answer))
-        return list(answer)
+        for f in answer:
+            yield msgpack.loads(f)
 
 
-class DirectoryClient(RttpClient):
+class ServiceUnavailable(Exception):
     pass
 
 
-# class Directory:
-#     """
+class DirectoryClient(RttpClient):
+    def ask_service(self, service_name, question):
+        try:
+            s_info = list(self.req(SERVICE_INFO, [service_name]))
+        except RttpError as rer:
+            raise ServiceUnavailable from rer
+        s = ReqRepClient(s_info[0]['rep_address'])
+        return s.req(question)
+
+
+class Directory:
+    """
+    Show realtime directory and services shanges
+    """
 #     d = Directory('ipc://directory')
 #     print(d.service('echo').req({'message': 'practice'}))
 #     """
@@ -58,32 +77,33 @@ class DirectoryClient(RttpClient):
 #         raise ServiceUnavailable from None
 
 
-def ask(directory, service_name, question):
-    try:
-        s_info = directory.req(SERVICE_INFO)
-    except RttpError as rer:
-        raise ServiceUnavailable from rer
-    s = ReqRepClient(s_info[0]['rep_address'])
-    return s.req(question)
-
-
 if __name__ == '__main__':
     import multiprocessing
-    from . import service_directory
-    sd = multiprocessing.spawn(service_directory.loop)
+    import service_directory
+    import service_echo
 
-    # es = multiprocessing.spawn(echo_service)
+    def spawn(fn, *args, daemon=True):
+        p = multiprocessing.Process(target=fn, args=args)
+        p.daemon = True
+        p.start()
+        return p
 
-    directory = DirectoryClient('ipc://directory')
-    print(ask)
-    answer = ask(directory, 'echo', [{'message': 'practice'}])
-    print(answer)
+    directory_address = 'ipc://directory'
+    p_directory = spawn(service_directory.loop, directory_address)
 
-    es.kill()
+    p_echo = spawn(service_echo.main, directory_address)
+
+    directory = DirectoryClient(directory_address)
+
+    # answer = directory.ask_service(b'echo', [{'message': 'practice'}])
+    # print(answer)
+
+    p_echo.terminate()
     sleep(1)
-    try:
-        ask(directory, 'echo', [{'message': 'now should by unavailable'}])
-    except ServiceUnavailable:
-        print('Ok, echo unavailable')
 
-    sd.kill()
+    try:
+        directory.ask_service('echo', [{'message': 'now should by unavailable'}])
+    except ServiceUnavailable:
+        print('Ok, "echo" is unavailable')
+
+    p_directory.terminate()
