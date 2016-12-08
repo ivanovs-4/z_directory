@@ -2,20 +2,20 @@
 import msgpack
 import zmq
 
-from directory_client import DirectoryClient
+from directory_client import Directory
 
 
-def main(directory_address):
-    """
-    1. connect to directory, say who we are
-    directory_address = 'ipc://directory'
-    directory = DirectoryClient(directory_address)
-    directory.req(b'register', [{'about': 'me'}])
+class Echo:
+    def __init__(self, address):
+        self._address = address
 
-    2. bind aur service socket and reply to it,
-    meantime send heartbeat to directory
-    """
+    def run(self, directory_address):
+        """
+        1. connect to directory, say who we are
+        directory_address = 'ipc://directory'
+        directory = Directory(directory_address)
+        directory.req(b'register', [{'about': 'me'}])
 
-
-if __name__ == '__main__':
-    main()
+        2. bind aur service socket and reply to it,
+        meantime send heartbeat to directory
+        """

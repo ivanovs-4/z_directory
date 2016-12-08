@@ -99,9 +99,43 @@ def loop(address):
             rep.send_multipart(response_frames)
 
 
-def main():
-    loop('ipc://directory')
+class DirectoryService:
+    def __init__(self, address):
+        self._address = address
+
+    def run(self):
+        loop(self._address)
 
 
 if __name__ == '__main__':
-    main()
+    import multiprocessing
+    from time import sleep
+
+    from service_echo import Echo
+    from directory_client import Directory, ServiceUnavailable
+
+    def spawn(fn, *args, daemon=True):
+        p = multiprocessing.Process(target=fn, args=args)
+        p.daemon = True
+        p.start()
+        return p
+
+    directory_address = 'ipc://directory'
+    p_directory = spawn(DirectoryService(directory_address).run)
+
+    p_echo = spawn(Echo('ipc://echo').run, directory_address)
+
+    directory = Directory(directory_address)
+
+    # answer = directory.ask_service(b'echo', {'message': 'practice'})
+    # print(answer)
+
+    p_echo.terminate()
+    sleep(1)
+
+    try:
+        directory.ask_service('echo', {'message': 'now should by unavailable'})
+    except ServiceUnavailable:
+        print('Ok, "echo" is unavailable')
+
+    p_directory.terminate()
