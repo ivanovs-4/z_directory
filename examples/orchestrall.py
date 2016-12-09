@@ -10,10 +10,12 @@ from services.directory.client import DirectoryClient, ServiceUnavailable
 from services.directory.server import DirectoryService
 from services.echo import EchoService
 
-logging.basicConfig()
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(processName)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 def spawn(fn, *args):

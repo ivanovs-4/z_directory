@@ -19,7 +19,7 @@ class EchoService(ZService):
         # 1. connect to directory, say who we are
         _dir = directory.client.DirectoryClient(directory_address)
         node = _dir.register(self)
-        logger.info('Node: %r', node)
+        logger.debug('Registered: %s', node)
 
         """
         2. bind aur service socket and reply to it,

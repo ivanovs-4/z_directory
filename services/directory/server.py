@@ -1,6 +1,7 @@
 """
 """
 import itertools
+import logging
 import random
 from collections import namedtuple
 
@@ -11,6 +12,8 @@ from transport import ReqRepNotFound
 
 
 ctx = zmq.Context()
+
+logger = logging.getLogger(__name__)
 
 
 class Router(dict):
@@ -42,6 +45,7 @@ DIRECTORY_NODE = next(nodes_counter)
 
 @router.add(REGISTER)
 def register(frames):
+    logger.debug('Register frames: %r', frames)
     about = frames[0]
     code = about[b'code']
     node_id = next(nodes_counter)
@@ -62,10 +66,13 @@ def get_subscription_address(frames):
 
 @router.add(SERVICE_INFO)
 def service_info(frames):
+    logger.debug('Service info frames: %r', frames)
     service_code = frames[0]
     if service_code not in DIRECTORY:
         raise ReqRepNotFound
-    return [DIRECTORY[service_code]]
+    info = [DIRECTORY[service_code]]
+    logger.debug('Service info answer: %r', info)
+    return info
 
 
 def loop(address):
