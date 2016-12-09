@@ -8,6 +8,7 @@ class ZClient:
 
     @classmethod
     def construct_from_s_info(cls, self, s_info):
+        # TODO use Directory protocol, methods
         first_frame = s_info[0]
         nodes_by_id = first_frame
         about = list(nodes_by_id.values())[0]
@@ -25,6 +26,7 @@ class ZService:
         raise NotImplementedError
 
     def about(self):
+        # TODO use Directory protocol, methods
         return {
             b'code': self.code,
         }

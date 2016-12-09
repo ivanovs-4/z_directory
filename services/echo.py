@@ -23,12 +23,13 @@ class EchoService(ZService):
 
         """
         2. bind aur service socket and reply to it,
-        meantime send heartbeat to directory
+        meantime send alive to directory
         """
         while True:
             pass
 
     def about(self):
+        # TODO use Directory protocol, methods
         return {
             b'code': self.code,
             b'rep_address': self._address,

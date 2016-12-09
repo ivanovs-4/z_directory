@@ -43,6 +43,10 @@ nodes_counter = itertools.count()
 DIRECTORY_NODE = next(nodes_counter)
 
 
+class Directory:
+    pass
+
+
 @router.add(REGISTER)
 def register(frames):
     logger.debug('Register frames: %r', frames)
@@ -75,14 +79,18 @@ def service_info(frames):
     return info
 
 
+# TODO move loop to ZService
 def loop(address):
     with ctx.socket(zmq.REP) as rep:
         rep.bind(address)
         while True:
             handle(rep, rep.recv_multipart())
             # TODO PUBlicate changes in services
+            # look at expired nodes and discard them
+            # alive method should update service expired param
 
 
+# TODO move handle to ZService
 def handle(rep, received):
     # TODO move this to transport
     from transport import ReqRepOk, ReqRepError, ReqRepTransportError
