@@ -31,7 +31,10 @@ class Directory(ZClient):
         except ReqRepError as rer:
             raise ServiceUnavailable from rer
 
-    def query_service(self, service, *args):
+    def get_client_for(self, service):
         s_info = self._service_info(service)
-        asked_client = service.client(s_info)
+        return service.client(s_info)
+
+    def query_service(self, service, *args):
+        asked_client = self.get_client_for(service)
         return asked_client.query_raw(*args)
