@@ -50,12 +50,13 @@ class ReqRepTransport:
 
 class ReqRepMsgpackTransport(ReqRepTransport):
     def req(self, *args):
-        frames = [msgpack.dumps(f) for f in args]
+        frames = [msgpack.dumps(f, use_bin_type=True) for f in args]
         answer = super().req(*frames)
         code = next(answer)
         if code != ReqRepOk.code:
             raise ReqRepError.from_code(code)(list(answer))
-        return (msgpack.loads(f) for f in answer)
+        return (msgpack.loads(f, encoding='utf-8', use_list=False)
+                for f in answer)
 
 
 class ReqRepMethodMsgpackTransport(ReqRepMsgpackTransport):

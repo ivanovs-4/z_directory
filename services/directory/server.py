@@ -87,7 +87,8 @@ def handle(rep, received):
     # TODO move this to transport
     from transport import ReqRepOk, ReqRepError, ReqRepTransportError
 
-    request_frames = (msgpack.loads(f) for f in received)
+    request_frames = (msgpack.loads(f, encoding='utf-8', use_list=False)
+                      for f in received)
     method_name = next(request_frames)
     handler = router.get(method_name)
     if handler:
@@ -95,9 +96,11 @@ def handle(rep, received):
             response_frames = handler(list(request_frames))
         except ReqRepError as e:
             response_frames = [ReqRepTransportError.code] + [
-                msgpack.dumps(p) for p in [repr(e).encode('utf-8')]]
+                msgpack.dumps(p, use_bin_type=True) for p in [repr(e).encode('utf-8')]]
         else:
-            response_frames = [ReqRepOk.code] + [msgpack.dumps(p) for p in response_frames]
+            response_frames = [ReqRepOk.code] + [
+                msgpack.dumps(p, use_bin_type=True) for p in response_frames
+            ]
     else:
         response_frames = [ReqRepNotFound.code]
     rep.send_multipart(response_frames)
