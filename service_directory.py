@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
+"""
+"""
+
+import itertools
+import random
+from collections import namedtuple
+
 import msgpack
 import zmq
+
+from transport import ReqRepNotFound
 
 
 ctx = zmq.Context()
@@ -22,12 +31,25 @@ SERVICE_INFO = b'service_info'
 GET_SUBSCRIPTION_ADDRESS = b'get_subscription_address'
 
 
-directory = {}
+DIRECTORY = {}
+NODES_SECRETS = {}
+
+
+Node = namedtuple('Node', 'id secret')
+
+
+nodes_counter = itertools.count()
+DIRECTORY_NODE = next(nodes_counter)
 
 
 @router.add(REGISTER)
 def register(frames):
-    return ['TODO']
+    about = frames[0]
+    code = about[b'code']
+    node_id = next(nodes_counter)
+    DIRECTORY[node_id] = about
+    NODES_SECRETS[node_id] = random.randint(10**6, 10**7)
+    return [Node(node_id, NODES_SECRETS[node_id])]
 
 
 @router.add(HEARTBEAT)
@@ -42,61 +64,38 @@ def get_subscription_address(frames):
 
 @router.add(SERVICE_INFO)
 def service_info(frames):
-    service_name = next(frames)
-    if service_name not in directory:
-        raise RttpNotFound
-    return [directory[service_name]]
-
-
-class RttpOk:
-    code = b'200'
-
-
-class RegisteredByCode(type):
-    def __init__(self, *args, **kwargs):
-        if self.__name__ != 'RttpError':
-            if self.code in self._by_code:
-                raise ValueError
-            self._by_code[self.code] = self
-        super().__init__(*args, **kwargs)
-
-
-class RttpError(Exception, metaclass=RegisteredByCode):
-    _by_code = {}
-
-    @classmethod
-    def from_code(cls, code):
-        return cls._by_code[code]
-
-
-class RttpClientError(RttpError):
-    code = b'400'
-
-
-class RttpNotFound(RttpError):
-    code = b'404'
+    service_code = frames[0]
+    if service_code not in DIRECTORY:
+        raise ReqRepNotFound
+    return [DIRECTORY[service_code]]
 
 
 def loop(address):
     with ctx.socket(zmq.REP) as rep:
         rep.bind(address)
         while True:
-            received = rep.recv_multipart()
+            handle(rep, rep.recv_multipart())
             # TODO PUBlicate changes in services
-            request_frames = iter(received)
-            r = next(request_frames)
-            handler = router.get(r)
-            if handler:
-                try:
-                    response_frames = handler(msgpack.loads(f) for f in request_frames)
-                except RttpError as e:
-                    response_frames = [RttpClientError.code] + [
-                        msgpack.dumps(p) for p in [repr(e).encode('utf-8')]]
-                else:
-                    response_frames = [RttpOk.code] + [msgpack.dumps(p) for p in response_frames]
-            else:
-                response_frames = [RttpNotFound.code]
-            rep.send_multipart(response_frames)
+
+
+def handle(rep, received):
+    # TODO move this to transport
+    from transport import ReqRepOk, ReqRepError, ReqRepTransportError
+
+    request_frames = iter(received)
+    method_name = next(request_frames)
+    handler = router.get(method_name)
+    if handler:
+        try:
+            response_frames = handler([msgpack.loads(f) for f in request_frames])
+        except ReqRepError as e:
+            response_frames = [ReqRepTransportError.code] + [
+                msgpack.dumps(p) for p in [repr(e).encode('utf-8')]]
+        else:
+            response_frames = [ReqRepOk.code] + [msgpack.dumps(p) for p in response_frames]
+    else:
+        response_frames = [ReqRepNotFound.code]
+    rep.send_multipart(response_frames)
 
 
 class DirectoryService:
@@ -111,30 +110,37 @@ if __name__ == '__main__':
     import multiprocessing
     from time import sleep
 
-    from service_echo import Echo
+    from service_echo import EchoService
     from directory_client import Directory, ServiceUnavailable
 
-    def spawn(fn, *args, daemon=True):
+    def spawn(fn, *args):
+        print('Spawn', fn, args)
         p = multiprocessing.Process(target=fn, args=args)
         p.daemon = True
+        print('Spawned:', repr(p))
         p.start()
+        print('Started:', repr(p), p.pid, p.is_alive())
         return p
 
-    directory_address = 'ipc://directory'
+    directory_address = 'ipc:///tmp/directory'
+    directory = Directory(directory_address)
     p_directory = spawn(DirectoryService(directory_address).run)
 
-    p_echo = spawn(Echo('ipc://echo').run, directory_address)
+    p_echo = spawn(EchoService('ipc:///tmp/echo').run, directory_address)
+    sleep(1)
 
-    directory = Directory(directory_address)
-
-    # answer = directory.ask_service(b'echo', {'message': 'practice'})
-    # print(answer)
+    try:
+        answer = directory.query_service(EchoService, {'message': 'practice'})
+    except ServiceUnavailable as e:
+        print(repr(e))
+    else:
+        print(answer)
 
     p_echo.terminate()
     sleep(1)
 
     try:
-        directory.ask_service('echo', {'message': 'now should by unavailable'})
+        directory.query_service(EchoService, {'message': 'now should by unavailable'})
     except ServiceUnavailable:
         print('Ok, "echo" is unavailable')
 

@@ -1,21 +1,30 @@
-#!/usr/bin/env python3
-import msgpack
-import zmq
+"""
+"""
 
 from directory_client import Directory
+from z_arch import ZService
 
 
-class Echo:
+class EchoService(ZService):
+    code = 'echo'
+    # client = EchoClient
+
     def __init__(self, address):
         self._address = address
 
-    def run(self, directory_address):
-        """
-        1. connect to directory, say who we are
-        directory_address = 'ipc://directory'
-        directory = Directory(directory_address)
-        directory.req(b'register', [{'about': 'me'}])
+    def about(self):
+        return {
+            'code': self.code,
+            'info': 'yes',
+        }
 
+    def run(self, directory_address):
+        # 1. connect to directory, say who we are
+        _dir = Directory(directory_address)
+        node = _dir.register(self)
+        print(node)
+
+        """
         2. bind aur service socket and reply to it,
         meantime send heartbeat to directory
         """
