@@ -4,7 +4,7 @@
 import multiprocessing
 from time import sleep
 
-from services.directory.client import Directory, ServiceUnavailable
+from services.directory.client import DirectoryClient, ServiceUnavailable
 from services.directory.server import DirectoryService
 from services.echo import EchoService
 
@@ -21,7 +21,7 @@ def spawn(fn, *args):
 
 def main():
     directory_address = 'ipc:///tmp/directory'
-    d = Directory(directory_address)
+    d = DirectoryClient(directory_address)
     p_directory = spawn(DirectoryService(directory_address).run)
 
     p_echo = spawn(EchoService('ipc:///tmp/echo').run, directory_address)

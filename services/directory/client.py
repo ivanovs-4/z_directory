@@ -10,7 +10,7 @@ class ServiceUnavailable(Exception):
     pass
 
 
-class Directory(ZClient):
+class DirectoryClient(ZClient):
     """
     Reflect realtime directory and services changes
     """
@@ -19,7 +19,8 @@ class Directory(ZClient):
         """
         Connect to address, subscribe to service changes
         """
-        self._address = address
+        # Or maybe directory=self ?
+        super().__init__(directory=None, address=address)
 
     def register(self, zservice):
         node = next(self.query_raw(server.REGISTER, zservice.about()))
@@ -33,7 +34,7 @@ class Directory(ZClient):
 
     def get_client_for(self, service):
         s_info = self._service_info(service)
-        return service.client.construct_from_about(s_info)
+        return service.client.construct_from_about(self, s_info)
 
     def query_service(self, service, *args):
         asked_client = self.get_client_for(service)
