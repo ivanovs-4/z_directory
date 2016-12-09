@@ -41,15 +41,17 @@ def main():
     except ServiceUnavailable as e:
         logger.info(repr(e))
     else:
-        logger.info(answer)
+        logger.info('Echo answer to main: %r', list(answer))
+        answer = d.query_service(EchoService, {'message': 'patience'})
+        logger.info('Second answer to main: %r', list(answer))
 
     p_echo.terminate()
     sleep(1)
 
-    try:
-        d.query_service(EchoService, {'message': 'now should by unavailable'})
-    except ServiceUnavailable:
-        logger.info('Ok, "echo" is unavailable')
+    # try:
+    #     d.query_service(EchoService, {'message': 'now should by unavailable'})
+    # except ServiceUnavailable:
+    #     logger.info('Ok, "echo" is unavailable')
 
     p_directory.terminate()
 
