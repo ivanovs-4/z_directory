@@ -1,4 +1,4 @@
-from transport import ReqRepMsgpackTransport
+from transport import ReqRepMethodMsgpackTransport
 
 
 class ZClient:
@@ -7,19 +7,24 @@ class ZClient:
         self._address = address
 
     @classmethod
-    def construct_from_about(cls, self, about):
-        return cls(self, about[0]['rep_address'])
+    def construct_from_s_info(cls, self, s_info):
+        first_frame = s_info[0]
+        nodes_by_id = first_frame
+        about = list(nodes_by_id.values())[0]
+        return cls(self, about[b'rep_address'])
 
     def query_raw(self, *args):
-        tran = ReqRepMsgpackTransport(self._address)
-        return tran.req(*args)
+        transport = ReqRepMethodMsgpackTransport(self._address)
+        return transport.req(*args)
 
 
 class ZService:
     client = ZClient
 
+    def run(self, directory_address):
+        raise NotImplementedError
+
     def about(self):
         return {
-            'code': self.code,
-            'info': 'yes',
+            b'code': self.code,
         }

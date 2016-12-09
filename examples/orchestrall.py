@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
 """
 """
+import logging
 import multiprocessing
+import sys
 from time import sleep
 
 from services.directory.client import DirectoryClient, ServiceUnavailable
 from services.directory.server import DirectoryService
 from services.echo import EchoService
 
+logging.basicConfig()
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler(sys.stdout))
+
 
 def spawn(fn, *args):
-    print('Spawn', fn, args)
+    logger.info('Spawn %r %r', fn, args)
     p = multiprocessing.Process(target=fn, args=args)
     p.daemon = True
-    print('Spawned:', repr(p))
+    logger.info('Spawned: %r', p)
     p.start()
-    print('Started:', repr(p), p.pid, p.is_alive())
+    logger.info('Started: %r %s %r', p, p.pid, p.is_alive())
     return p
 
 
@@ -30,9 +37,9 @@ def main():
     try:
         answer = d.query_service(EchoService, {'message': 'practice'})
     except ServiceUnavailable as e:
-        print(repr(e))
+        logger.info(repr(e))
     else:
-        print(answer)
+        logger.info(answer)
 
     p_echo.terminate()
     sleep(1)
@@ -40,7 +47,7 @@ def main():
     try:
         d.query_service(EchoService, {'message': 'now should by unavailable'})
     except ServiceUnavailable:
-        print('Ok, "echo" is unavailable')
+        logger.info('Ok, "echo" is unavailable')
 
     p_directory.terminate()
 

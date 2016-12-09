@@ -34,7 +34,7 @@ class DirectoryClient(ZClient):
 
     def get_client_for(self, service):
         s_info = self._service_info(service)
-        return service.client.construct_from_about(self, s_info)
+        return service.client.construct_from_s_info(self, s_info)
 
     def query_service(self, service, *args):
         asked_client = self.get_client_for(service)

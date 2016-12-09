@@ -45,7 +45,7 @@ def register(frames):
     about = frames[0]
     code = about[b'code']
     node_id = next(nodes_counter)
-    DIRECTORY[node_id] = about
+    DIRECTORY.setdefault(code, {})[node_id] = about
     NODES_SECRETS[node_id] = random.randint(10**6, 10**7)
     return [Node(node_id, NODES_SECRETS[node_id])]
 
@@ -80,12 +80,12 @@ def handle(rep, received):
     # TODO move this to transport
     from transport import ReqRepOk, ReqRepError, ReqRepTransportError
 
-    request_frames = iter(received)
+    request_frames = (msgpack.loads(f) for f in received)
     method_name = next(request_frames)
     handler = router.get(method_name)
     if handler:
         try:
-            response_frames = handler([msgpack.loads(f) for f in request_frames])
+            response_frames = handler(list(request_frames))
         except ReqRepError as e:
             response_frames = [ReqRepTransportError.code] + [
                 msgpack.dumps(p) for p in [repr(e).encode('utf-8')]]
@@ -97,8 +97,17 @@ def handle(rep, received):
 
 
 class DirectoryService:
+    code = b'directory'
+
     def __init__(self, address):
         self._address = address
 
-    def run(self):
+    def run(self, directory_address=None):
+        """
+        Should it make so ?
+
+        _dir = directory.client.DirectoryClient(directory_address)
+        node = _dir.register(self)
+
+        """
         loop(self._address)
