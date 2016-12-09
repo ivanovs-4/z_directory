@@ -1,7 +1,6 @@
 """
 """
-
-from directory_client import Directory
+from services import directory
 from z_arch import ZService
 
 
@@ -20,7 +19,7 @@ class EchoService(ZService):
 
     def run(self, directory_address):
         # 1. connect to directory, say who we are
-        _dir = Directory(directory_address)
+        _dir = directory.client.Directory(directory_address)
         node = _dir.register(self)
         print(node)
 

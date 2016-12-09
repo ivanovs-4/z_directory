@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
 """
-
 import itertools
 import random
 from collections import namedtuple
@@ -110,8 +109,8 @@ if __name__ == '__main__':
     import multiprocessing
     from time import sleep
 
-    from service_echo import EchoService
-    from directory_client import Directory, ServiceUnavailable
+    from services.directory.client import Directory, ServiceUnavailable
+    from services.echo import EchoService
 
     def spawn(fn, *args):
         print('Spawn', fn, args)
@@ -123,14 +122,14 @@ if __name__ == '__main__':
         return p
 
     directory_address = 'ipc:///tmp/directory'
-    directory = Directory(directory_address)
+    d = Directory(directory_address)
     p_directory = spawn(DirectoryService(directory_address).run)
 
     p_echo = spawn(EchoService('ipc:///tmp/echo').run, directory_address)
     sleep(1)
 
     try:
-        answer = directory.query_service(EchoService, {'message': 'practice'})
+        answer = d.query_service(EchoService, {'message': 'practice'})
     except ServiceUnavailable as e:
         print(repr(e))
     else:
@@ -140,7 +139,7 @@ if __name__ == '__main__':
     sleep(1)
 
     try:
-        directory.query_service(EchoService, {'message': 'now should by unavailable'})
+        d.query_service(EchoService, {'message': 'now should by unavailable'})
     except ServiceUnavailable:
         print('Ok, "echo" is unavailable')
 

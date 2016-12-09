@@ -1,9 +1,9 @@
 """
 """
-
-from service_directory import REGISTER, SERVICE_INFO, Node
 from transport import ReqRepError
 from z_arch import ZClient
+
+from . import server
 
 
 class ServiceUnavailable(Exception):
@@ -22,12 +22,12 @@ class Directory(ZClient):
         self._address = address
 
     def register(self, zservice):
-        node = next(self.query_raw(REGISTER, zservice.about()))
-        return Node(*node)
+        node = next(self.query_raw(server.REGISTER, zservice.about()))
+        return server.Node(*node)
 
     def _service_info(self, service):
         try:
-            return list(self.query_raw(SERVICE_INFO, service.code))
+            return list(self.query_raw(server.SERVICE_INFO, service.code))
         except ReqRepError as rer:
             raise ServiceUnavailable from rer
 
