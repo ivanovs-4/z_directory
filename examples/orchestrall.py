@@ -34,7 +34,7 @@ def main():
     p_directory = spawn(DirectoryService(directory_address).run)
 
     p_echo = spawn(EchoService('ipc:///tmp/echo').run, directory_address)
-    sleep(1)
+    sleep(0.1)
 
     try:
         answer = d.query_service(EchoService, {'message': 'practice'})
@@ -46,7 +46,7 @@ def main():
         logger.info('Second answer to main: %r', list(answer))
 
     p_echo.terminate()
-    sleep(1)
+    sleep(0.1)
 
     # try:
     #     d.query_service(EchoService, {'message': 'now should by unavailable'})

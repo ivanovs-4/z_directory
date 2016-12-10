@@ -1,26 +1,29 @@
 """
 """
+import logging
+
 import zmq
-import msgpack
+
+logger = logging.getLogger(__name__)
 
 
 ctx = zmq.Context()
 
 
-class ReqRepOk:
+class ZReqRepOk:
     code = b'200'
 
 
 class RegisteredByCode(type):
     def __init__(self, *args, **kwargs):
-        if self.__name__ != 'ReqRepError':
+        if self.__name__ != 'ZReqRepError':
             if self.code in self._by_code:
                 raise ValueError
             self._by_code[self.code] = self
         super().__init__(*args, **kwargs)
 
 
-class ReqRepError(Exception, metaclass=RegisteredByCode):
+class ZReqRepError(Exception, metaclass=RegisteredByCode):
     _by_code = {}
 
     @classmethod
@@ -28,15 +31,23 @@ class ReqRepError(Exception, metaclass=RegisteredByCode):
         return cls._by_code[code]
 
 
-class ReqRepTransportError(ReqRepError):
+class ReqTransportError(ZReqRepError):
     code = b'400'
 
 
-class ReqRepNotFound(ReqRepError):
+class ZRoutedMethodNotFound(ZReqRepError):
+    code = b'401'
+
+
+class ZRoutedNotFound(ZReqRepError):
     code = b'404'
 
 
-class ReqRepTransport:
+class ZRepInternalError(ZReqRepError):
+    code = b'500'
+
+
+class ReqTransport:
     def __init__(self, address):
         self._address = address
 
@@ -44,24 +55,29 @@ class ReqRepTransport:
         # TODO cache socket
         with ctx.socket(zmq.REQ) as s:
             s.connect(self._address)
+
+            logger.debug('Send request frames: %r to address %r', frames, self._address)
+
             s.send_multipart(frames)
-            return iter(s.recv_multipart())
+            received_frames = s.recv_multipart()
+
+            logger.debug('Received response frames: %r from address %r', received_frames, self._address)
+            return self._process_response_code(iter(received_frames))
+
+    def _process_response_code(self, response_frames):
+        try:
+            response_code = next(response_frames)
+        except StopIteration:
+            raise ZProtocolError('No response code') from None
+        if response_code != ZReqRepOk.code:
+            raise ZReqRepError.from_code(response_code)
+        return response_frames
 
 
-class ReqRepMsgpackTransport(ReqRepTransport):
-    def req(self, *args):
-        frames = [msgpack.dumps(f, use_bin_type=True) for f in args]
-        answer = super().req(*frames)
-        code = next(answer)
-        if code != ReqRepOk.code:
-            raise ReqRepError.from_code(code)(list(answer))
-        return (msgpack.loads(f, encoding='utf-8', use_list=False)
-                for f in answer)
+    @staticmethod
+    def rep(rep_socket, frames):
+            rep_socket.send_multipart(frames)
 
 
-class ReqRepMethodMsgpackTransport(ReqRepMsgpackTransport):
-    """
-    Add method name
-    """
-    def req(self, method_name, *args):
-        return super().req(method_name, *args)
+class ZProtocolError(Exception):
+    pass
