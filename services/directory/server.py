@@ -20,6 +20,7 @@ class Router(dict):
     def add(self, route):
         def decorator(fn):
             self[route] = fn
+            return fn
         return decorator
 
 
