@@ -34,6 +34,9 @@ class ZClient(Z):
 class ZService(Z):
     client = ZClient
 
+    def __init__(self, ttl):
+        self._ttl = ttl
+
     def run(self, directory_address):
         raise NotImplementedError
 
@@ -42,9 +45,9 @@ class ZService(Z):
         raise NotImplementedError
 
     def about(self):
-        # TODO use Directory protocol, methods
         return {
             b'code': self.code,
+            b'ttl_ms': int(self._ttl * 1000),
         }
 
 
@@ -72,7 +75,8 @@ class ZReqRepClient(ZClient):
 class ZReqRepService(ZService):
     client = ZReqRepClient
 
-    def __init__(self, address):
+    def __init__(self, address, ttl):
+        super().__init__(ttl)
         self._address = address
 
     def about(self):
@@ -104,7 +108,7 @@ class ZReqRepService(ZService):
                 except transport.ZReqRepError as e:
                     ReqTransport.rep(rep_socket, [e.code])
 
-                except Exception as e:
+                except e:
                     logger.error('%r %r', self.__class__.__name__, e)
                     ReqTransport.rep(rep_socket, [transport.ZRepInternalError.code])
 
@@ -166,6 +170,7 @@ class RoutedService(ZReqRepService, metaclass=AddRouterAttr):
             unpacked_request_iframes = (load(f) for f in iframes)
             response_frames = list(handler(unpacked_request_iframes))
         except Exception as e:
+            logger.exception('Handler error: %r', e)
             raise transport.ZRepInternalError from None
 
         return [dump(f) for f in response_frames]

@@ -4,6 +4,7 @@ import itertools
 import logging
 import random
 from collections import namedtuple
+from datetime import datetime, timedelta
 
 import transport
 
@@ -21,27 +22,12 @@ SERVICE_INFO = b'service_info'
 GET_SUBSCRIPTION_ADDRESS = b'get_subscription_address'
 
 
-DIRECTORY = {}
-NODES_SECRETS = {}
-
-
-Node = namedtuple('Node', 'id secret')
-
-
-nodes_counter = itertools.count()
-DIRECTORY_NODE = next(nodes_counter)
-
-
-class Directory:
-    pass
-
-
 class DirectoryService(RoutedService):
     code = b'directory'
     client = client.DirectoryClient
 
     def __init__(self, address):
-        self._address = address
+        super().__init__(address=address, ttl=None)
 
     # def run(self, directory_address):
     def run(self):
@@ -62,21 +48,74 @@ class DirectoryService(RoutedService):
         # alive method should update service expired param
 
 
+Node = namedtuple('Node', 'id secret')
+
+
+class Directory:
+    def __init__(self):
+        self._nodes_counter = itertools.count(start=1)
+        self._nodes_by_code = {}
+        self._codes_by_node = {}
+        self._expiration = {}
+
+    def new_node(self, code, about):
+        node = Node(
+            next(self._nodes_counter),
+            random.randint(10**6, 10**7)
+        )
+        self._nodes_by_code.setdefault(code, {})[node] = about
+        self._codes_by_node[node] = code
+        self._update_expire_dt(node)
+        return node
+
+    def get_service_about(self, code):
+        nodes = self._nodes_by_code.get(code)
+        if not nodes:
+            return None
+        return {
+            node.id: {
+                **about,
+                b'expired_after_ms': int((self._expiration[node] - datetime.now()).total_seconds() * 1000),
+            }
+            for node, about in nodes.items()
+        }
+
+    def get_about_by_node(self, node):
+        code = self._codes_by_node.get(node)
+        if not code:
+            return None  # Skip unknown node. Or say that it is not registered?
+        return self._nodes_by_code[code].get(node)
+
+    def alive_node(self, node):
+        self._update_expire_dt(node)
+
+    def _update_expire_dt(self, node):
+        about = self.get_about_by_node(node)
+        if not about:
+            return  # Skip unknown node. Or say that it is not registered?
+        self._expiration[node] = datetime.now() + timedelta(milliseconds=about[b'ttl_ms'])
+
+    def clean_expired(self):
+        pass
+
+
+directory = Directory()
+
+
 @DirectoryService.route(REGISTER)
 def register(frames):
     frames = list(frames)
     logger.debug('Register frames: %r', frames)
     about = frames[0]
-    code = about[b'code']
-    node_id = next(nodes_counter)
-    DIRECTORY.setdefault(code, {})[node_id] = about
-    NODES_SECRETS[node_id] = random.randint(10**6, 10**7)
-    return [Node(node_id, NODES_SECRETS[node_id])]
+    node = directory.new_node(about[b'code'], about)
+    return [node]
 
 
 @DirectoryService.route(HEARTBEAT)
 def heartbeat(frames):
-    return ['TODO']
+    node = Node(*next(frames))
+    directory.alive_node(node)
+    return []
 
 
 @DirectoryService.route(GET_SUBSCRIPTION_ADDRESS)
@@ -91,9 +130,11 @@ def service_info(frames):
     except StopIteration:
         raise ReqTransportError('Service code not provided') from None
 
-    if service_code not in DIRECTORY:
+    logger.debug('Service info code: %r', service_code)
+    about = directory.get_service_about(service_code)
+    if not about:
         raise transport.ZRoutedNotFound
 
-    info = [DIRECTORY[service_code]]
+    info = [about]
     logger.debug('Service info answer: %r', info)
-    return info
+    return [about]

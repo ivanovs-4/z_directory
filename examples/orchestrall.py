@@ -33,7 +33,7 @@ def main():
     d = DirectoryClient(directory_address)
     p_directory = spawn(DirectoryService(directory_address).run)
 
-    p_echo = spawn(EchoService('ipc:///tmp/echo').run, directory_address)
+    p_echo = spawn(EchoService('ipc:///tmp/echo', ttl=0.2).run, directory_address)
     sleep(0.1)
 
     try:
@@ -46,7 +46,7 @@ def main():
         logger.info('Second answer to main: %r', list(answer))
 
     p_echo.terminate()
-    sleep(0.1)
+    sleep(0.3)
 
     # try:
     #     d.query_service(EchoService, {'message': 'now should by unavailable'})
