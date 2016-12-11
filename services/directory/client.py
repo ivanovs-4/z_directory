@@ -2,6 +2,7 @@
 """
 import logging
 
+import transport
 from z_arch import ZReqRepClient
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,6 @@ class DirectoryClient(ZReqRepClient):
 
     def query_raw(self, method_name, *args):
         """Should return iterator over frames"""
-        import transport
         # logger.info('_directory_address: %r', self._directory_address)
         t = transport.ReqTransport(self._directory_address)
         request_frames = [self._dump(f) for f in args]
@@ -47,8 +47,6 @@ class DirectoryClient(ZReqRepClient):
         return (self._load(f) for f in response_frames)
 
     def _service_info(self, service):
-        import transport
-        from services.directory.client import ServiceUnavailable
         from services.directory import server
         try:
             return list(self.query_raw(server.SERVICE_INFO, service.code))

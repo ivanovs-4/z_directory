@@ -5,6 +5,8 @@ import msgpack
 import zmq
 
 import transport
+from transport import ReqTransport
+
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +65,6 @@ class ZReqRepClient(ZClient):
 
     def query_raw(self, *args):
         """Should return iterator over frames"""
-        import transport
         t = transport.ReqTransport(self._directory_address)
         response_frames = t.req(*[self._dump(f) for f in args])
         return (self._load(f) for f in response_frames)
@@ -149,8 +150,6 @@ class ZReqRepService(ZService):
         self._dir.send_alive(self._node)
 
     def _handle_rep_socket(self, rep_socket):
-        from transport import ReqTransport
-
         try:
             received_frames = rep_socket.recv_multipart()
             logger.debug('%s Incoming request frames: %r', self.__class__.__name__, received_frames)
