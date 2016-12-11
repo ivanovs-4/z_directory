@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 import msgpack
 import zmq
@@ -35,7 +36,7 @@ class ZService(Z):
     client = ZClient
 
     def __init__(self, ttl):
-        self._ttl = ttl
+        self._ttl_ms = ttl and int(ttl * 1000)
 
     def run(self, directory_address):
         raise NotImplementedError
@@ -47,7 +48,7 @@ class ZService(Z):
     def about(self):
         return {
             b'code': self.code,
-            b'ttl_ms': int(self._ttl * 1000),
+            b'ttl_ms': self._ttl_ms,
         }
 
 
@@ -95,33 +96,68 @@ class ZReqRepService(ZService):
         self._loop()
 
     def _loop(self):
-        from transport import ReqTransport
-
         with ctx.socket(zmq.REP) as rep_socket:
             rep_socket.bind(self._address)
+            poller = zmq.Poller()
+            poller.register(rep_socket, zmq.POLLIN|zmq.POLLOUT)
+
+            socket_handlers = {rep_socket: self._handle_rep_socket}
+
+            def elapsed_ms_from_last_send_alive():
+                return int(
+                    (datetime.now() - last_sent_allive)
+                    .total_seconds() * 1000)
+
+            def handle_alive_sending():
+                if not self._ttl_ms:
+                    return
+
+                if elapsed_ms_from_last_send_alive() > self._ttl_ms // 3:
+                    # send
+                    logger.debug('Send alive %r', self._node)
+                    self._dir.send_alive(self._node)
+                    return datetime.now()
+                return last_sent_allive
+
+            last_sent_allive = datetime.now()
+
             while True:
-                try:
-                    received_frames = rep_socket.recv_multipart()
-                    logger.debug('%s Incoming request frames: %r', self.__class__.__name__, received_frames)
-                    response_frames = self._handle(received_frames)
+                last_sent_allive = handle_alive_sending()
 
-                except transport.ZReqRepError as e:
-                    ReqTransport.rep(rep_socket, [e.code])
-
-                except e:
-                    logger.error('%r %r', self.__class__.__name__, e)
-                    ReqTransport.rep(rep_socket, [transport.ZRepInternalError.code])
-
+                if self._ttl_ms:
+                    timeout_ms = (
+                        self._ttl_ms - elapsed_ms_from_last_send_alive()) // 3
+                    socks = dict(poller.poll(timeout_ms))
                 else:
-                    ReqTransport.rep(
-                        rep_socket,
-                        [transport.ZReqRepOk.code, *response_frames]
-                    )
+                    socks = dict(poller.poll())
 
-                """
-                2. bind aur service socket and reply to it,
-                meantime send alive to directory
-                """
+                for socket in socks.keys():
+                    last_sent_allive = handle_alive_sending()
+                    socket_handlers[socket](socket)
+
+            poller.unregister(rep_socket)
+
+
+    def _handle_rep_socket(self, rep_socket):
+        from transport import ReqTransport
+
+        try:
+            received_frames = rep_socket.recv_multipart()
+            logger.debug('%s Incoming request frames: %r', self.__class__.__name__, received_frames)
+            response_frames = self._handle(received_frames)
+
+        except transport.ZReqRepError as e:
+            ReqTransport.rep(rep_socket, [e.code])
+
+        except Exception as e:
+            logger.error('%r %r', self.__class__.__name__, e)
+            ReqTransport.rep(rep_socket, [transport.ZRepInternalError.code])
+
+        else:
+            ReqTransport.rep(
+                rep_socket,
+                [transport.ZReqRepOk.code, *response_frames]
+            )
 
 
 class Router(dict):

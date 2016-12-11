@@ -33,6 +33,10 @@ class DirectoryClient(ZReqRepClient):
         asked_client = self.get_client_for(service)
         return asked_client.query_raw(*args)
 
+    def send_alive(self, node):
+        from services.directory import server
+        self.query_raw(server.HEARTBEAT, node)
+
     def query_raw(self, method_name, *args):
         """Should return iterator over frames"""
         import transport

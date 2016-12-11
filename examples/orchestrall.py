@@ -33,7 +33,7 @@ def main():
     d = DirectoryClient(directory_address)
     p_directory = spawn(DirectoryService(directory_address).run)
 
-    p_echo = spawn(EchoService('ipc:///tmp/echo', ttl=0.2).run, directory_address)
+    p_echo = spawn(EchoService('ipc:///tmp/echo', ttl=0.3).run, directory_address)
     sleep(0.1)
 
     try:
@@ -45,6 +45,7 @@ def main():
         answer = d.query_service(EchoService, {'message': 'patience'})
         logger.info('Second answer to main: %r', list(answer))
 
+    sleep(1)
     p_echo.terminate()
     sleep(0.3)
 

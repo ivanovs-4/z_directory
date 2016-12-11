@@ -94,6 +94,7 @@ class Directory:
         if not about:
             return  # Skip unknown node. Or say that it is not registered?
         self._expiration[node] = datetime.now() + timedelta(milliseconds=about[b'ttl_ms'])
+        logger.debug('_update_expire_dt: %r %r', node, self._expiration[node])
 
     def clean_expired(self):
         pass
