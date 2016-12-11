@@ -39,7 +39,7 @@ class ZRoutedMethodNotFound(ZReqRepError):
     code = b'401'
 
 
-class ZRoutedNotFound(ZReqRepError):
+class ZServiceNotFound(ZReqRepError):
     code = b'404'
 
 

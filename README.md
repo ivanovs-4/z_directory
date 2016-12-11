@@ -1,6 +1,6 @@
 ### TODO
 
-* [ ] DirectoryService Drop expired services
+* [x] DirectoryService Drop expired services
 * [x] ZReqRepService send alive to directory service
 * [ ] Make RoutedService.routes, ZReqRepService.handler as Interface
 * [ ] DirectoryService Pub service changes

@@ -1,14 +1,14 @@
 """
 """
+import heapq
 import itertools
 import logging
 import random
 from collections import namedtuple
-from datetime import datetime, timedelta
 
 import transport
 
-from z_arch import RoutedService
+from z_arch import RoutedService, _get_now_ms
 
 from . import client
 
@@ -29,6 +29,9 @@ class DirectoryService(RoutedService):
     def __init__(self, address):
         super().__init__(address=address, ttl=None)
 
+    def _handle_alive_sending(self):
+        pass
+
     # def run(self, directory_address):
     def run(self):
         # Unlike other services must not resister in itself.
@@ -47,6 +50,12 @@ class DirectoryService(RoutedService):
         # look at expired nodes and discard them
         # alive method should update service expired param
 
+    def _each_loop(self):
+        directory.clean_expired()
+
+    def _get_loop_timeout_ms(self):
+        return directory._minimal_ttl_ms // 10
+
 
 Node = namedtuple('Node', 'id secret')
 
@@ -57,6 +66,10 @@ class Directory:
         self._nodes_by_code = {}
         self._codes_by_node = {}
         self._expiration = {}
+        self._expired_nodes = set()
+        self._expiration_to_check = []
+
+        self._minimal_ttl_ms = 101201320
 
     def new_node(self, code, about):
         node = Node(
@@ -66,16 +79,23 @@ class Directory:
         self._nodes_by_code.setdefault(code, {})[node] = about
         self._codes_by_node[node] = code
         self._update_expire_dt(node)
+
+        if self._minimal_ttl_ms > about[b'ttl_ms']:
+            self._minimal_ttl_ms = about[b'ttl_ms']
+
         return node
 
     def get_service_about(self, code):
-        nodes = self._nodes_by_code.get(code)
+        nodes = {
+            n: about for n, about in self._nodes_by_code.get(code).items()
+            if n not in self._expired_nodes
+        }
         if not nodes:
             return None
         return {
             node.id: {
                 **about,
-                b'expired_after_ms': int((self._expiration[node] - datetime.now()).total_seconds() * 1000),
+                b'expired_after_ms': self._expiration[node] - _get_now_ms(),
             }
             for node, about in nodes.items()
         }
@@ -93,11 +113,18 @@ class Directory:
         about = self.get_about_by_node(node)
         if not about:
             return  # Skip unknown node. Or say that it is not registered?
-        self._expiration[node] = datetime.now() + timedelta(milliseconds=about[b'ttl_ms'])
-        logger.debug('_update_expire_dt: %r %r', node, self._expiration[node])
+        exp = self._expiration[node] = _get_now_ms() + about[b'ttl_ms']
+        heapq.heappush(self._expiration_to_check, (exp, node))
+        self._expired_nodes.discard(node)
+        logger.debug('_update_expire_dt: %r %r', node, exp)
 
     def clean_expired(self):
-        pass
+        now = _get_now_ms()
+        while self._expiration_to_check and self._expiration_to_check[0][0] < now:
+            exp, node = heapq.heappop(self._expiration_to_check)
+            if self._expiration[node] <= now:
+                logger.info('Service ttl expired: %r %r', node, exp)
+                self._expired_nodes.add(node)
 
 
 directory = Directory()
@@ -134,7 +161,7 @@ def service_info(frames):
     logger.debug('Service info code: %r', service_code)
     about = directory.get_service_about(service_code)
     if not about:
-        raise transport.ZRoutedNotFound
+        raise transport.ZServiceNotFound
 
     info = [about]
     logger.debug('Service info answer: %r', info)

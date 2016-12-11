@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+import time
 
 import msgpack
 import zmq
@@ -18,6 +18,10 @@ def dump(value):
 def load(value):
     # logger.debug('load: %r', value)
     return msgpack.loads(value, encoding='utf-8', use_list=False)
+
+
+def _get_now_ms():
+    return int(time.time() * 1000)
 
 
 class Z:
@@ -103,40 +107,46 @@ class ZReqRepService(ZService):
 
             socket_handlers = {rep_socket: self._handle_rep_socket}
 
-            def elapsed_ms_from_last_send_alive():
-                return int(
-                    (datetime.now() - last_sent_allive)
-                    .total_seconds() * 1000)
-
-            def handle_alive_sending():
-                if not self._ttl_ms:
-                    return
-
-                if elapsed_ms_from_last_send_alive() > self._ttl_ms // 3:
-                    # send
-                    logger.debug('Send alive %r', self._node)
-                    self._dir.send_alive(self._node)
-                    return datetime.now()
-                return last_sent_allive
-
-            last_sent_allive = datetime.now()
+            self._last_sent_allive = _get_now_ms()
 
             while True:
-                last_sent_allive = handle_alive_sending()
+                self._handle_alive_sending()
+                self._each_loop()
 
-                if self._ttl_ms:
-                    timeout_ms = (
-                        self._ttl_ms - elapsed_ms_from_last_send_alive()) // 3
-                    socks = dict(poller.poll(timeout_ms))
-                else:
-                    socks = dict(poller.poll())
+                timeout_ms = self._get_loop_timeout_ms()
+                logger.debug('Poll with timeout: %s', timeout_ms)
+                socks = dict(poller.poll(timeout_ms))
 
                 for socket in socks.keys():
-                    last_sent_allive = handle_alive_sending()
+                    self._handle_alive_sending()
                     socket_handlers[socket](socket)
 
             poller.unregister(rep_socket)
 
+    def _get_loop_timeout_ms(self):
+        return (self._ttl_ms - self._elapsed_ms_from_last_send_alive()) // 3
+
+    def _each_loop(self):
+        pass
+
+    def _handle_alive_sending(self):
+        now = _get_now_ms()
+
+        # If system clock chaned to past
+        if self._last_sent_allive > now:
+            self._last_sent_allive = now
+
+        if self._elapsed_ms_from_last_send_alive() > self._ttl_ms // 3:
+            # send
+            self._send_alive()
+            self._last_sent_allive = _get_now_ms()
+
+    def _elapsed_ms_from_last_send_alive(self):
+        return _get_now_ms() - self._last_sent_allive
+
+    def _send_alive(self):
+        logger.debug('Send alive %r', self._node)
+        self._dir.send_alive(self._node)
 
     def _handle_rep_socket(self, rep_socket):
         from transport import ReqTransport
@@ -205,6 +215,8 @@ class RoutedService(ZReqRepService, metaclass=AddRouterAttr):
         try:
             unpacked_request_iframes = (load(f) for f in iframes)
             response_frames = list(handler(unpacked_request_iframes))
+        except transport.ZReqRepError:
+            raise
         except Exception as e:
             logger.exception('Handler error: %r', e)
             raise transport.ZRepInternalError from None
