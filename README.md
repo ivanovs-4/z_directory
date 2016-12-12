@@ -2,7 +2,7 @@
 
 * [x] DirectoryService Drop expired services
 * [x] ZReqRepService send alive to directory service
-* [ ] Make RoutedService.routes, ZReqRepService.handler as Interface
+* [x] Make RoutedService.routes, ZReqRepService.handler as Interface
 * [ ] DirectoryService Pub service changes
 * [ ] Organize derectory structure
 * [ ] Make python package

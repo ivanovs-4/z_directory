@@ -33,16 +33,16 @@ def main():
     d = DirectoryClient(directory_address)
     p_directory = spawn(DirectoryService(directory_address).run)
 
-    p_echo = spawn(EchoService('ipc:///tmp/echo', ttl=0.9).run, directory_address)
+    p_echo = spawn(EchoService('ipc:///tmp/echo', ttl=0.7).run, directory_address)
     sleep(0.1)
 
     try:
-        answer = d.query_service(EchoService, {'message': 'practice'})
+        answer = d.get_client_for(EchoService).send({'message': 'practice'})
     except ServiceUnavailable as e:
         logger.info(repr(e))
     else:
         logger.info('Echo answer to main: %r', list(answer))
-        answer = d.query_service(EchoService, {'message': 'patience'})
+        answer = d.get_client_for(EchoService).send({'message': 'patience'})
         logger.info('Second answer to main: %r', list(answer))
 
     sleep(1)
@@ -50,7 +50,7 @@ def main():
     sleep(1)
 
     try:
-        d.query_service(EchoService, {'message': 'now should by unavailable'})
+        d.get_client_for(EchoService).send({'message': 'now should by unavailable'})
     except ServiceUnavailable:
         logger.info('Ok, "echo" is unavailable')
 

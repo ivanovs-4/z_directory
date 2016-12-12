@@ -51,7 +51,7 @@ class ReqTransport:
     def __init__(self, address):
         self._address = address
 
-    def req(self, *frames):
+    def req(self, frames):
         # TODO cache socket
         with ctx.socket(zmq.REQ) as s:
             s.connect(self._address)

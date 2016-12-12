@@ -3,7 +3,7 @@
 import itertools
 import logging
 
-from z_arch import ZReqRepService
+from z_arch import ZReqRepService, ReqRepInterface
 
 logger = logging.getLogger(__name__)
 
@@ -11,13 +11,12 @@ logger = logging.getLogger(__name__)
 echo_counter = itertools.count()
 
 
+class EchoInterface(ReqRepInterface):
+    def reply(self, service, frames):
+        return [next(echo_counter), *frames]
+
+
 class EchoService(ZReqRepService):
     code = b'echo'
     # client = EchoClient
-
-    def _handle(self, frames):
-        logger.debug('Echo._handle frames: %r', frames)
-        return [
-            self._dump(next(echo_counter)),
-            *frames
-        ]
+    interface = EchoInterface()

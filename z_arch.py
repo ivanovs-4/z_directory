@@ -27,15 +27,71 @@ def _get_now_ms():
 
 
 class Z:
-    def _dump(self, value):
-        return dump(value)
+    pass
 
-    def _load(self, value):
-        return load(value)
+
+class Interface(Z):
+    """
+    Incapsulates both client request and server response
+    """
+
+    def send(self, req_address, frames):
+        raise NotImplementedError
+
+    def reply(self, service, frames):
+        raise NotImplementedError
+
+
+class ReqRepNonSerializedInterface(Interface):
+    """Should return iterator over frames"""
+    def send(self, req_address, frames):
+        t = transport.ReqTransport(req_address)
+        return t.req(frames)
+
+
+class ReqRepInterface(ReqRepNonSerializedInterface):
+    def send(self, req_address, frames):
+        response_frames = super().send(req_address, [
+            dump(f) for f in frames
+        ])
+        return (load(f) for f in response_frames)
+
+
+class RoutedInterface(ReqRepNonSerializedInterface):
+    def __init__(self, method_code):
+        self.method_code = method_code
+
+    def send(self, req_address, frames):
+        request_frames = [self.method_code, *[dump(f) for f in frames]]
+        response_frames = super().send(req_address, request_frames)
+        return (load(f) for f in response_frames)
 
 
 class ZClient(Z):
     pass
+
+
+class ZReqRepClient(ZClient):
+    def __init__(self, directory, directory_address):
+        # self._directory = directory
+        self._directory_address = directory_address
+
+    def send(self, *args):
+        return self.service.interface.send(self._directory_address, args)
+
+    @classmethod
+    def construct_client_from_s_info(cls, self, s_info):
+        first_frame = s_info[0]
+        nodes_by_id = first_frame
+        about = list(nodes_by_id.values())[0]
+        return cls(self, about[b'rep_address'])
+
+
+class RoutedClient(ZReqRepClient):
+    def _send(self, interface, *args):
+        logger.debug('------- _send: %r', args)
+        return self.service.interfaces[interface].send(
+            self._directory_address, args)
 
 
 class ZService(Z):
@@ -58,28 +114,9 @@ class ZService(Z):
         }
 
 
-class ZReqRepClient(ZClient):
-    def __init__(self, directory, directory_address):
-        # self._directory = directory
-        self._directory_address = directory_address
-
-    def query_raw(self, *args):
-        """Should return iterator over frames"""
-        t = transport.ReqTransport(self._directory_address)
-        response_frames = t.req(*[self._dump(f) for f in args])
-        return (self._load(f) for f in response_frames)
-
-    @classmethod
-    def construct_from_s_info(cls, self, s_info):
-        # TODO use Directory protocol, methods
-        first_frame = s_info[0]
-        nodes_by_id = first_frame
-        about = list(nodes_by_id.values())[0]
-        return cls(self, about[b'rep_address'])
-
-
 class ZReqRepService(ZService):
     client = ZReqRepClient
+    interface = ReqRepInterface()
 
     def __init__(self, address, ttl):
         super().__init__(ttl)
@@ -115,8 +152,12 @@ class ZReqRepService(ZService):
                 self._each_loop()
 
                 timeout_ms = self._get_loop_timeout_ms()
-                logger.debug('Poll with timeout: %s', timeout_ms)
-                socks = dict(poller.poll(timeout_ms))
+                logger.debug('%s Poll with timeout: %r', self.__class__.__name__, timeout_ms)
+
+                if timeout_ms is not None:
+                    socks = dict(poller.poll(timeout_ms))
+                else:
+                    socks = dict(poller.poll())
 
                 for socket in socks.keys():
                     self._handle_alive_sending()
@@ -138,7 +179,6 @@ class ZReqRepService(ZService):
             self._last_sent_allive = now
 
         if self._elapsed_ms_from_last_send_alive() > self._ttl_ms // 3:
-            # send
             self._send_alive()
             self._last_sent_allive = _get_now_ms()
 
@@ -168,52 +208,45 @@ class ZReqRepService(ZService):
                 [transport.ZReqRepOk.code, *response_frames]
             )
 
+    def _handle(self, frames):
+        request_frames = (load(f) for f in frames)
+        response_frames = list(self.interface.reply(self, request_frames))
+        return [dump(f) for f in response_frames]
 
-class Router(dict):
-    def add(self, route):
-        def decorator(fn):
-            self[route] = fn
-            return fn
-        return decorator
-
-
-# TODO Need Interface abstraction that incapsulates both client request and
-# server response
+ZReqRepClient.service = ZReqRepService
 
 
-class AddRouterAttr(type):
+class RoutedServiceMeta(type):
     def __init__(self, *args, **kwargs):
-        self._router = Router()
         super().__init__(*args, **kwargs)
+        self.client.service = self
 
 
-class RoutedClient(ZReqRepClient):
-    pass
-
-
-class RoutedService(ZReqRepService, metaclass=AddRouterAttr):
+class RoutedService(ZReqRepService, metaclass=RoutedServiceMeta):
     client = RoutedClient
+    interfaces = ()
 
-    @classmethod
-    def route(cls, method_name):
-        def route_add(fn):
-            return cls._router.add(method_name)(fn)
-        return route_add
+    def __init__(self, address, ttl):
+        super().__init__(address, ttl)
+        self._routes = {j.method_code: j for j in self.interfaces.values()}
 
     def _handle(self, frames):
         iframes = iter(frames)
         try:
-            method_name = next(iframes)
+            method_code = next(iframes)
         except StopIteration:
             raise transport.ReqTransportError from None
 
-        handler = self._router.get(method_name)
+        handler = self._routes.get(method_code)
         if not handler:
             raise transport.ZRoutedMethodNotFound
 
         try:
             unpacked_request_iframes = (load(f) for f in iframes)
-            response_frames = list(handler(unpacked_request_iframes))
+            response_frames = list(handler.reply(
+                service=self,
+                frames=unpacked_request_iframes
+            ))
         except transport.ZReqRepError:
             raise
         except Exception as e:
