@@ -36,6 +36,8 @@ class Directory:
         self._codes_by_node[node] = code
         self._update_expire_dt(node)
 
+        logger.debug('self._nodes_by_code: %r', self._nodes_by_code)
+
         return node
 
     def get_service_about(self, code):

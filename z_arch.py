@@ -145,23 +145,29 @@ class ZReqRepService(ZService):
 
             socket_handlers = {rep_socket: self._handle_rep_socket}
 
-            self._last_sent_allive = _get_now_ms()
+            self._last_sent_alive = _get_now_ms()
 
             while True:
-                self._handle_alive_sending()
-                self._each_loop()
-
-                timeout_ms = self._get_loop_timeout_ms()
-                logger.debug('%s Poll with timeout: %r', self.__class__.__name__, timeout_ms)
-
-                if timeout_ms is not None:
-                    socks = dict(poller.poll(timeout_ms))
-                else:
-                    socks = dict(poller.poll())
-
-                for socket in socks.keys():
+                try:
                     self._handle_alive_sending()
-                    socket_handlers[socket](socket)
+                    self._each_loop()
+
+                    timeout_ms = self._get_loop_timeout_ms()
+                    logger.debug('%s Poll with timeout: %r', self.__class__.__name__, timeout_ms)
+
+                    if timeout_ms is not None:
+                        socks = dict(poller.poll(timeout_ms))
+                    else:
+                        socks = dict(poller.poll())
+
+                    # logger.debug('Socks: %r', socks)
+
+                    for socket in socks.keys():
+                        self._handle_alive_sending()
+                        socket_handlers[socket](socket)
+
+                except Exception:
+                    logger.traceback('Loop critical failure')
 
             poller.unregister(rep_socket)
 
@@ -175,15 +181,15 @@ class ZReqRepService(ZService):
         now = _get_now_ms()
 
         # If system clock chaned to past
-        if self._last_sent_allive > now:
-            self._last_sent_allive = now
+        if self._last_sent_alive > now:
+            self._last_sent_alive = now
 
         if self._elapsed_ms_from_last_send_alive() > self._ttl_ms // 3:
             self._send_alive()
-            self._last_sent_allive = _get_now_ms()
+            self._last_sent_alive = _get_now_ms()
 
     def _elapsed_ms_from_last_send_alive(self):
-        return _get_now_ms() - self._last_sent_allive
+        return _get_now_ms() - self._last_sent_alive
 
     def _send_alive(self):
         logger.debug('Send alive %r', self._node)
