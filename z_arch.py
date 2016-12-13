@@ -205,7 +205,7 @@ class ZReqRepService(ZService):
             ReqTransport.rep(rep_socket, [e.code])
 
         except Exception as e:
-            logger.error('%r %r', self.__class__.__name__, e)
+            logger.exception('%r %r', self.__class__.__name__, e)
             ReqTransport.rep(rep_socket, [transport.ZRepInternalError.code])
 
         else:
@@ -230,7 +230,7 @@ class RoutedServiceMeta(type):
 
 class RoutedService(ZReqRepService, metaclass=RoutedServiceMeta):
     client = RoutedClient
-    interfaces = ()
+    interfaces = dict()
 
     def __init__(self, address, ttl):
         super().__init__(address, ttl)

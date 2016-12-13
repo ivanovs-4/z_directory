@@ -7,7 +7,7 @@
 * [ ] Organize derectory structure
 * [ ] Make python package
 * Add services:
-    * [ ] Web interface
+    * [x] Web interface
     * [ ] Remote directory discovery
     * [ ] One-point registry for remote discovery
 * Warm shutdown and restart service

@@ -36,12 +36,13 @@ def spawner(num, directory_address):
         ps.append(spawn(EchoService('ipc:///tmp/echo_F_{}'.format(j), ttl=1).run, directory_address))
         sleep(0.3)
 
-    ps.append(p_directory)
-
-    sleep(7)
+    sleep(10)
 
     for j in ps:
         j.terminate()
+
+    sleep(30)
+    p_directory.terminate()
 
 
 def main():
@@ -72,6 +73,8 @@ def main():
     answer = d.get_client_for(EchoService).send({'message': 'interest'})
     logger.info('Third answer to main: %r', list(answer))
     sleep(1)
+
+    logger.info('Full info: %r', d.dump_full_info())
 
     p_spawner.join()
 

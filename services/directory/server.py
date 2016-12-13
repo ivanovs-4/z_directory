@@ -40,6 +40,12 @@ class Directory:
 
         return node
 
+    def get_full_info(self):
+        return {
+            '_nodes_by_code': self._nodes_by_code,
+            '_expired_nodes': list(self._expired_nodes),
+        }
+
     def get_service_about(self, code):
         nodes = {
             n: about for n, about in (self._nodes_by_code.get(code) or {}).items()
@@ -121,6 +127,11 @@ class ServiceInfoMethod(RoutedInterface):
         return [about]
 
 
+class DumpFullInfo(RoutedInterface):
+    def reply(self, service, frames):
+        return [service._directory.get_full_info()]
+
+
 class GetSubscriptionAddressMethod(RoutedInterface):
     def reply(self, service, frames):
         return ['TODO']
@@ -134,6 +145,7 @@ class DirectoryService(RoutedService):
         'heartbeat': HeartbeatMethod(b'heartbeat'),
         'service_info': ServiceInfoMethod(b'service_info'),
         'get_subscription_address': GetSubscriptionAddressMethod(b'get_subscription_address'),
+        'dump_full_info': DumpFullInfo(b'dump_full_info'),
     }
 
     def __init__(self, address):

@@ -25,7 +25,6 @@ class DirectoryClient(RoutedClient):
         super().__init__(directory=None, directory_address=directory_address)
 
     def register(self, zservice):
-        from services.directory import server
         answer = self._send('register', zservice.about())
         node = next(answer)
         logger.debug('node params: %r', node)
@@ -44,3 +43,9 @@ class DirectoryClient(RoutedClient):
         s_info = self._service_info(service)
         logger.debug('service %r info: %r', service, s_info)
         return service.client.construct_client_from_s_info(self, s_info)
+
+    def dump_full_info(self):
+        return list(self._send('dump_full_info'))
+
+
+from services.directory import server
