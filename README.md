@@ -3,6 +3,8 @@
 * [x] DirectoryService Drop expired services
 * [x] ZReqRepService send alive to directory service
 * [x] Make RoutedService.routes, ZReqRepService.handler as Interface
+* [ ] Service should re-register if heartbeat returns UnknownNode
+* [ ] Use one name either 'alive' or 'heartbeat'
 * [ ] DirectoryService Pub service changes
 * [ ] Organize derectory structure
 * [ ] Make python package

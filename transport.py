@@ -43,6 +43,14 @@ class ZServiceNotFound(ZReqRepError):
     code = b'404'
 
 
+class UnknownNode(ZReqRepError):
+    """
+    Server will answer with this code if it doesn't know Node(id, secret)
+    parameter of heartbeat method
+    """
+    code = b'405'
+
+
 class ZRepInternalError(ZReqRepError):
     code = b'500'
 
